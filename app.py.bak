@@ -132,4 +132,6 @@ def getSummary():
     return render_template('summary.html',result=summarized_result, body=transcript, subjective=s, objective=o, assessment=a, plan=p)
 
 if __name__ =="__main__":
-    app.run(debug=True,port=5000)
+from waitress import serve
+    serve(app, host="0.0.0.0", port=8080)
+    #app.run(debug=True,port=5000)
