@@ -1,0 +1,135 @@
+#Library import
+import re
+import pandas as pd
+import numpy as np
+from nltk.corpus import stopwords
+from textblob import TextBlob, Word
+from summarizer import Summarizer
+from summarizer.sbert import SBertSummarizer
+import spacy
+from nltk.tokenize import word_tokenize
+from nltk.tokenize.treebank import TreebankWordDetokenizer
+from sklearn.preprocessing import LabelEncoder
+from tensorflow import keras
+import pickle
+import nltk
+import keras
+import tensorflow as tf
+from tensorflow.keras.preprocessing.text import Tokenizer
+from tensorflow.keras.preprocessing.sequence import pad_sequences
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Embedding, Dense, Bidirectional, LSTM, GlobalAveragePooling1D
+from tensorflow.keras.callbacks import EarlyStopping
+from flask import Flask, render_template,request
+
+def complete(transcript):
+
+    #Transcript
+    #transcript = "Yoga develops inner awareness. It focuses your attention on your body's abilities at the present moment. It helps develop breath and strength of mind and body. It's not about physical appearance.Yoga studios typically don't have mirrors.This is so people can focus their awareness inward rather than how a pose — or the people around them — looks."
+    #transcript.str.lower()
+
+    #Model Initialization
+    nlp = spacy.load('en_core_web_sm')
+    model_spacy = SBertSummarizer('paraphrase-MiniLM-L6-v2')
+    label_encoder = LabelEncoder()
+    soap_model = keras.models.load_model('soap_model.h5')
+    # load tokenizer
+    with open('model/manual_tokenizer.pickle', 'rb') as handle:
+        tokenizer = pickle.load(handle)
+    # load model
+    model = tf.keras.models.load_model('model/soap2_model.h5')
+
+
+    #Stop Word Removal
+    word_tokens = word_tokenize(transcript)
+    add_stop = ['hello', 'sir', 'hi', 'doctor', 'good morning', 'how are you', 'thank you']
+    stop = stopwords.words('english')
+    stop.extend(add_stop)
+
+    filtered_sentence = [w for w in word_tokens if not w.lower() in stop]
+    filtered_sentence = []
+
+
+    for w in word_tokens:
+        if w not in stop:
+            filtered_sentence.append(w)
+
+    untokenize_transcript = TreebankWordDetokenizer().detokenize(filtered_sentence)
+
+
+    #Summarized Text
+    summarized_result = model_spacy(untokenize_transcript, ratio=0.5)
+
+
+    # declare variables for preprocessing
+    vocab_size = 1000
+    max_length = 142
+    trunc_type = 'post'
+    padding_type = 'post'
+    oov_token = '<OOV>'
+
+    mapper = {'Assessment': 0, 'Plan': 1, 'Subjective': 2, 'Objective': 3}
+
+    sentiment_dict = {}
+    pred = {}
+    sentences = nltk.sent_tokenize(untokenize_transcript)
+
+    for k, v in mapper.items():
+        sentiment_dict[v] = k
+
+    def preprocess_text(text):
+        sequences = tokenizer.texts_to_sequences(text)
+        padded = pad_sequences(sequences, maxlen=max_length, padding=padding_type, truncating=trunc_type)
+        return padded
+
+    for word in sentences:
+        padded = preprocess_text(word)
+        prediction = model.predict(padded)
+        classes = np.argmax(prediction, axis=-1)
+        pred[word] = sentiment_dict[int(classes[0])]
+
+
+    dict_items = pred.items()
+    assessment = "Assessment"
+    objective = "Objective"
+    plan = "Plan"
+    subjective = "Subjective"
+    a = [key for key, value in dict_items if value == assessment]
+    s = [key for key, value in dict_items if value == subjective]
+    o = [key for key, value in dict_items if value == objective]
+    p = [key for key, value in dict_items if value == plan]
+
+    def newlin(arr):
+        dummy = ""
+        for a in arr:
+            dummy+=a
+            dummy+="\n"
+        return dummy
+
+    a = newlin(a)
+    s = newlin(s)
+    o = newlin(o)
+    p = newlin(p)
+
+    return summarized_result, a, s, o, p
+
+
+app = Flask(__name__)
+
+
+@app.route("/")
+def msg():
+    return render_template('index.html')
+
+@app.route("/summarize",methods=['POST','GET'])
+def getSummary():
+    transcript = request.form['data']
+    transcript = str(transcript)
+    summarized_result, a, s, o, p = complete(transcript)
+
+   
+    
+    return render_template('summary.html',result=summarized_result, body=transcript, subjective=s, objective=o, assessment=a, plan=p)
+
+if __name__ =="__main__":
+    app.run(debug=True,port=5000)
