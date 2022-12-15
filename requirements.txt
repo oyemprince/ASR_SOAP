@@ -1,0 +1,12 @@
+pandas
+numpy
+nltk
+textblob
+summarizer
+summarizer.sbert
+spacy
+sklearn
+tensorflow
+pickle
+keras
+flask
