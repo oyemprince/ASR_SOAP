@@ -4,7 +4,7 @@ nltk
 textblob
 summarizer
 torch
-summarizer.sbert
+bert-extractive-summarizer
 spacy
 sklearn
 tensorflow
