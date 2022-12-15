@@ -3,6 +3,7 @@ numpy
 nltk
 textblob
 summarizer
+torch
 summarizer.sbert
 spacy
 sklearn
